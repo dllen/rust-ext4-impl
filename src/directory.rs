@@ -1,7 +1,6 @@
 //! Directory entry for ext4 filesystem.
 
-use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 use crate::error::Ext4Error;
 use crate::inode::Inode;
 
@@ -36,7 +35,7 @@ impl Directory {
             return Err(Ext4Error::InvalidDirectory("Not a directory".to_string()));
         }
 
-        let mut entries = Vec::new();
+        let entries = Vec::new();
         
         // TODO: Implement reading directory entries from the inode's data blocks
         // This is a complex operation that involves reading the inode's data blocks

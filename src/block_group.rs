@@ -1,7 +1,7 @@
 //! Block group descriptor for ext4 filesystem.
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use crate::error::Ext4Error;
 
 /// The block group descriptor of an ext4 filesystem.

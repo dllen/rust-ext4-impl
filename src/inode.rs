@@ -1,7 +1,7 @@
 //! Inode structure for ext4 filesystem.
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use crate::error::Ext4Error;
 
 /// The inode structure of an ext4 filesystem.

@@ -9,9 +9,7 @@ mod directory;
 mod file;
 
 use std::fs::File as StdFile;
-use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::Path;
-use memmap2::MmapOptions;
+use std::io::{Read, Seek, SeekFrom, Write};
 
 pub use error::Ext4Error;
 pub use superblock::Superblock;
@@ -451,7 +449,7 @@ impl Ext4Filesystem {
         self.add_directory_entry(parent_inode_num, dirname, new_inode_num, 2)?; // 2 = directory
         
         // 7. Update the parent inode's link count (for the new ".." entry)
-        let mut updated_parent = parent_inode.clone();
+        let updated_parent = parent_inode.clone();
         // updated_parent.links_count += 1;
         self.write_inode(parent_inode_num, &updated_parent)?;
         

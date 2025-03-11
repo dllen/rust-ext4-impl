@@ -1,7 +1,7 @@
 //! The superblock of an ext4 filesystem.
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use crate::error::Ext4Error;
 
 /// The magic number of an ext4 filesystem.

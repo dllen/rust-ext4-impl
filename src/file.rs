@@ -1,6 +1,6 @@
 //! File operations for ext4 filesystem.
 
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use byteorder::{LittleEndian, ReadBytesExt};
 use crate::error::Ext4Error;
 use crate::inode::Inode;
