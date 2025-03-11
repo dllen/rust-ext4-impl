@@ -77,6 +77,3 @@ cargo build --release
 ## License
 
 MIT
-```
-
-This README update adds documentation for the `mkdir` and `rm` commands, including examples of how to use them and the `-f` flag for force removing non-empty directories.
