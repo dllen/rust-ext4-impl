@@ -1,0 +1,14 @@
+[package]
+name = "rust_ext4_impl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byteorder = "1.4.3"
+thiserror = "1.0.40"
+log = "0.4.17"
+memmap2 = "0.5.10"
+
+[[bin]]
+name = "ext4-tool"
+path = "src/main.rs"
