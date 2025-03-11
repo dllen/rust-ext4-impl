@@ -45,4 +45,8 @@ pub enum Ext4Error {
     /// No space left on the filesystem.
     #[error("No space left on filesystem: {0}")]
     NoSpace(String),
+    
+    /// The block is invalid.
+    #[error("Invalid block: {0}")]
+    InvalidBlock(String),
 }
