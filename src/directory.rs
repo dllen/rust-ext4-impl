@@ -29,6 +29,15 @@ pub struct Directory {
 }
 
 impl Directory {
+
+    /// Create a new empty directory
+    pub fn new() -> Self {
+        Directory {
+            inode: Inode::default(),
+            entries: Vec::new(),
+        }
+    }
+
     /// Read a directory from a reader.
     pub fn read<R: Read + Seek>(reader: &mut R, inode: Inode, block_size: u32) -> Result<Self, Ext4Error> {
         if !inode.is_directory() {
