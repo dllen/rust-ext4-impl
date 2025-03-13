@@ -14,6 +14,10 @@ A Rust implementation of the ext4 filesystem for educational purposes.
 ## Usage
 
 ```bash
+dd if=/dev/zero of=ext4.img bs=1M count=100
+
+mkfs.ext4 ext4.img
+
 cargo run -- <ext4_image> [command] [args...]
 ```
 

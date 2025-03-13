@@ -48,7 +48,7 @@ pub struct Inode {
 impl Inode {
     /// Read an inode from a reader.
     pub fn read<R: Read + Seek>(reader: &mut R, inode_size: u32, inode_num: u32, inodes_per_group: u32, inode_table_block: u32, block_size: u32) -> Result<Self, Ext4Error> {
-        let group = (inode_num - 1) / inodes_per_group;
+        let _group = (inode_num - 1) / inodes_per_group;
         let index = (inode_num - 1) % inodes_per_group;
         let offset = inode_table_block * block_size + index * inode_size;
         

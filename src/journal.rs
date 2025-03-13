@@ -36,7 +36,7 @@ pub struct Journal {
 
 impl Journal {
     /// Read a journal from a reader.
-    pub fn read<R: Read + Seek>(reader: &mut R, journal_inode: u32, block_size: u32) -> Result<Self, Ext4Error> {
+    pub fn read<R: Read + Seek>(_reader: &mut R, _journal_inode: u32, block_size: u32) -> Result<Self, Ext4Error> {
         // TODO: Implement reading the journal from the journal inode
         // For now, we'll just create a dummy journal
         let superblock = JournalSuperblock {
