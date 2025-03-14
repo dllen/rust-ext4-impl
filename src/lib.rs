@@ -12,8 +12,8 @@ use std::fs::File as StdFile;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 pub use block_group::BlockGroup;
-pub use byteorder::{LittleEndian, WriteBytesExt};
 use byteorder::ReadBytesExt;
+pub use byteorder::{LittleEndian, WriteBytesExt};
 pub use directory::Directory;
 pub use error::Ext4Error;
 pub use file::File;
@@ -41,22 +41,20 @@ impl Ext4Filesystem {
         // 1. 同步元数据（超级块和块组描述符）
         self.sync_fs_metadata()?;
 
-        // 2. 同步位图数据
+        // 2. 同步位图数据 - 修复重复写入问题
         println!("同步位图数据...");
         for (i, bg) in self.block_groups.iter().enumerate() {
-            // 同步 inode 位图
+            // 同步 inode 位图 - 只读取和验证，不重复写入
             let mut file_clone = self.file.try_clone()?;
-            file_clone.seek(SeekFrom::Start(
-                (bg.inode_bitmap * self.superblock.block_size()) as u64,
-            ))?;
-            file_clone.sync_all()?;
+            let inode_bitmap_offset = (bg.inode_bitmap * self.superblock.block_size()) as u64;
+            file_clone.seek(SeekFrom::Start(inode_bitmap_offset))?;
+            file_clone.sync_data()?;
 
-            // 同步块位图
+            // 同步块位图 - 只读取和验证，不重复写入
             let mut file_clone = self.file.try_clone()?;
-            file_clone.seek(SeekFrom::Start(
-                (bg.block_bitmap * self.superblock.block_size()) as u64,
-            ))?;
-            file_clone.sync_all()?;
+            let block_bitmap_offset = (bg.block_bitmap * self.superblock.block_size()) as u64;
+            file_clone.seek(SeekFrom::Start(block_bitmap_offset))?;
+            file_clone.sync_data()?;
 
             println!("块组 {} 的位图已同步", i);
         }
@@ -80,45 +78,49 @@ impl Ext4Filesystem {
     }
 
     /// 将文件系统的关键数据结构持久化到磁盘
-    fn sync_fs_metadata(&mut self) -> Result<(), Ext4Error> {
+    pub fn sync_fs_metadata(&mut self) -> Result<(), Ext4Error> {
         println!("开始同步文件系统元数据到磁盘...");
 
-        // 1. 写入超级块
+        // 1. 写入超级块（这部分保持不变）
         println!("同步超级块...");
         self.write_superblock()?;
 
-        // 2. 写入块组描述符表
+        // 2. 写入块组描述符表 - 修复重复写入问题
         println!("同步块组描述符...");
         let block_size = self.superblock.block_size();
         let mut file_clone = self.file.try_clone()?;
 
-        // 块组描述符表通常位于超级块之后
+        // 计算块组描述符表的起始位置
         let bgdt_start = if self.superblock.first_data_block == 0 {
             2048 // 超级块后的第一个块
         } else {
             (self.superblock.first_data_block + 1) * block_size
         };
 
+        // 一次性写入所有块组描述符
         file_clone.seek(SeekFrom::Start(bgdt_start as u64))?;
 
-        // 写入每个块组描述符
-        for (i, bg) in self.block_groups.iter().enumerate() {
-            println!("写入块组 {} 的描述符", i);
-            use byteorder::{LittleEndian, WriteBytesExt};
+        // 创建一个缓冲区来存储所有块组描述符
+        let mut bgdt_buffer = Vec::with_capacity(self.block_groups.len() * 32);
 
-            file_clone.write_u32::<LittleEndian>(bg.block_bitmap)?;
-            file_clone.write_u32::<LittleEndian>(bg.inode_bitmap)?;
-            file_clone.write_u32::<LittleEndian>(bg.inode_table)?;
-            file_clone.write_u16::<LittleEndian>(bg.free_blocks_count)?;
-            file_clone.write_u16::<LittleEndian>(bg.free_inodes_count)?;
-            file_clone.write_u16::<LittleEndian>(bg.used_dirs_count)?;
-            // 写入填充和保留字段
-            file_clone.write_all(&[0u8; 14])?;
+        // 将所有块组描述符打包到缓冲区
+        for (i, bg) in self.block_groups.iter().enumerate() {
+            println!("打包块组 {} 的描述符", i);
+            bgdt_buffer.extend_from_slice(&bg.block_bitmap.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&bg.inode_bitmap.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&bg.inode_table.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&bg.free_blocks_count.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&bg.free_inodes_count.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&bg.used_dirs_count.to_le_bytes());
+            bgdt_buffer.extend_from_slice(&[0u8; 14]); // 填充和保留字段
         }
 
-        // 3. 确保数据写入磁盘
+        // 一次性写入所有数据
+        file_clone.write_all(&bgdt_buffer)?;
+
+        // 确保数据写入磁盘
         println!("强制同步到磁盘...");
-        self.file.sync_all()?;
+        file_clone.sync_data()?;
 
         println!("文件系统元数据同步完成");
         Ok(())
@@ -656,6 +658,8 @@ impl Ext4Filesystem {
             )));
         }
 
+        let mut file_clone = self.file.try_clone()?;
+
         // 1. 分配新的 inode
         println!("开始分配新的 inode");
         let new_inode_num = self.allocate_inode()?;
@@ -692,7 +696,6 @@ impl Ext4Filesystem {
 
         // 5. 写入目录项
         println!("写入 '.' 和 '..' 目录项");
-        // self.write_directory_entries(block_num, new_inode_num, parent_inode_num)?;
         // 创建新目录的 entries 结构
         let mut new_directory = self.read_directory(new_inode_num)?;
         println!("成功读取新创建的目录结构");
@@ -710,28 +713,13 @@ impl Ext4Filesystem {
             file_type: 2,
             name: "..".to_string(),
         });
-        println!("目录项写入成功");
         // 持久化新目录的 entries
         println!("持久化新目录的 entries 到磁盘");
-        let mut file_clone = self.file.try_clone()?;
         new_directory.write(&mut file_clone, self.superblock.block_size())?;
-
+        println!("目录项写入成功");
 
         // 6. 添加目录项到父目录
         println!("开始将新目录添加到父目录");
-        // match self.add_directory_entry(parent_inode_num, dirname, new_inode_num, 2) {
-        //     Ok(_) => println!("成功添加目录项到父目录"),
-        //     Err(Ext4Error::Io(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-        //         println!("添加目录项时遇到 EOF，开始清理资源");
-        //         self.free_inode(new_inode_num)?;
-        //         self.free_block(block_num)?;
-        //         return Err(Ext4Error::Io(e));
-        //     }
-        //     Err(e) => {
-        //         println!("添加目录项时发生错误: {:?}", e);
-        //         return Err(e);
-        //     }
-        // }
         // 添加新目录到父目录的 entries
         parent_directory.entries.push(directory::DirectoryEntry {
             inode: new_inode_num,
@@ -742,7 +730,6 @@ impl Ext4Filesystem {
         });
 
         println!("持久化父目录的 entries 到磁盘");
-        let mut file_clone = self.file.try_clone()?;
         parent_directory.write(&mut file_clone, self.superblock.block_size())?;
 
         // 7. 更新父目录
@@ -781,6 +768,8 @@ impl Ext4Filesystem {
         println!("目录结构更新完成");
         println!("超级块状态：{:?}", self.superblock);
         println!("目录 '{}' 创建完成", dirname);
+
+        parent_directory.print_details();
 
         Ok(())
     }
@@ -1038,8 +1027,10 @@ impl Ext4Filesystem {
         inode_num: u32,
         file_type: u8,
     ) -> Result<(), Ext4Error> {
-        println!("开始添加目录项: dir_inode={}, name={}, new_inode={}, file_type={}", 
-            dir_inode_num, name, inode_num, file_type);
+        println!(
+            "开始添加目录项: dir_inode={}, name={}, new_inode={}, file_type={}",
+            dir_inode_num, name, inode_num, file_type
+        );
 
         // 读取目录的 inode
         let mut dir_inode = self.read_inode(dir_inode_num)?;
@@ -1054,12 +1045,14 @@ impl Ext4Filesystem {
                 dir_inode.block[i] = new_block;
                 dir_inode.size += block_size as u32;
                 dir_inode.blocks = ((i + 1) * block_size / 512) as u32;
-                
+
                 // 写入新目录项
                 let entry_size = 8 + name.len(); // 头部(8字节) + 文件名长度
                 let mut file_clone = self.file.try_clone()?;
-                file_clone.seek(SeekFrom::Start((new_block * self.superblock.block_size()) as u64))?;
-                
+                file_clone.seek(SeekFrom::Start(
+                    (new_block * self.superblock.block_size()) as u64,
+                ))?;
+
                 // 写入目录项
                 use byteorder::{LittleEndian, WriteBytesExt};
                 file_clone.write_u32::<LittleEndian>(inode_num)?;
@@ -1079,8 +1072,10 @@ impl Ext4Filesystem {
 
             // 检查现有块中的空间
             let mut file_clone = self.file.try_clone()?;
-            file_clone.seek(SeekFrom::Start((block_num * self.superblock.block_size()) as u64))?;
-            
+            file_clone.seek(SeekFrom::Start(
+                (block_num * self.superblock.block_size()) as u64,
+            ))?;
+
             let mut block_data = vec![0u8; block_size];
             file_clone.read_exact(&mut block_data)?;
 
@@ -1120,7 +1115,9 @@ impl Ext4Filesystem {
             }
         }
 
-        Err(Ext4Error::NoSpace("No space left in directory blocks".to_string()))
+        Err(Ext4Error::NoSpace(
+            "No space left in directory blocks".to_string(),
+        ))
     }
 
     /// Remove an entry from a directory.

@@ -99,6 +99,20 @@ fn print_filesystem_info(fs: &Ext4Filesystem) {
     println!("---------------------------");
 }
 
+fn get_file_type_str(file_type: u8) -> &'static str {
+    match file_type {
+        0 => "未知",
+        1 => "普通文件",
+        2 => "目录",
+        3 => "字符设备",
+        4 => "块设备",
+        5 => "FIFO",
+        6 => "套接字",
+        7 => "符号链接",
+        _ => "未知类型",
+    }
+}
+
 fn list_directory(fs: &mut Ext4Filesystem, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("尝试列出目录: {}", path);
 
@@ -107,11 +121,25 @@ fn list_directory(fs: &mut Ext4Filesystem, path: &str) -> Result<(), Box<dyn std
 
     let directory = fs.read_directory(inode_num)?;
 
+
+    println!("目录中的条目数: {}", directory.entries.len());
+    println!("\n目录项详细信息:");
+    println!("----------------------------------------");
+    for (idx, entry) in directory.entries.iter().enumerate() {
+        println!("条目 #{}", idx + 1);
+        println!("  inode:     {}", entry.inode);
+        println!("  rec_len:   {} bytes", entry.rec_len);
+        println!("  name_len:  {} bytes", entry.name_len);
+        println!("  file_type: {} ({})", entry.file_type, get_file_type_str(entry.file_type));
+        println!("  name:      {}", entry.name);
+        println!("----------------------------------------");
+    }
+
+    println!("\n标准格式显示:");
+    
     println!("目录 '{}' 的内容:", path);
     println!("---------------------------");
     println!("Inode    Type    Size    Name");
-
-    println!("目录中的条目数: {}", directory.entries.len());
 
     for entry in &directory.entries {
         // 跳过 . 和 .. 条目的详细信息，但仍然显示它们
